@@ -3,16 +3,28 @@ const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
 
-const PORT = process.env.PORT || 3000;
-
 const app = express();
 app.use(bodyParser.json());
 
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
-// Initialize the userId counter
-let currentUserId = 1; // Start from 1. Note: This will reset every time the server restarts.
+// Initialize the userId counter based on the number of existing users in the database
+let currentUserId;
+
+const initializeUserId = async () => {
+    try {
+        const notionPages = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID,
+        });
+        currentUserId = notionPages.results.length + 1;
+    } catch (error) {
+        console.error('Error initializing user ID:', error);
+        currentUserId = 1; // Fallback to 1 if there's an error
+    }
+};
+
+initializeUserId();
 
 // Endpoint to create a user and return a userId
 app.post('/user', async (req, res) => {
@@ -33,11 +45,8 @@ app.post('/user', async (req, res) => {
                     title: [{ text: { content: name } }],
                 },
                 "User ID": {
-                    rich_text: [{ text: { content: userId.toString() } }],
-                },
-                "GitHub Signup Complete": {
-                    checkbox: false,
-                },
+                    number: userId,
+                }
             },
         });
 
@@ -63,8 +72,8 @@ app.patch('/user/:id', async (req, res) => {
             database_id: process.env.NOTION_DATABASE_ID,
             filter: {
                 property: 'User ID',
-                text: {
-                    equals: id.toString(),
+                number: {
+                    equals: parseInt(id),
                 },
             },
         });
@@ -80,16 +89,16 @@ app.patch('/user/:id', async (req, res) => {
         await notion.pages.update({
             page_id: pageId,
             properties: {
-                "GitHub Username": {
+                "Github username": {
                     rich_text: [{ text: { content: githubUsername } }],
                 },
-                "GitHub Signup Complete": {
+                "Github signup": {
                     checkbox: true,
                 },
             },
         });
 
-        res.status(200).send('GitHub username submitted and tracked successfully!');
+        res.status(200).send('GitHub username submitted successfully!');
     } catch (error) {
         console.error('Error updating GitHub username in Notion:', error);
         res.status(500).send('An error occurred while submitting GitHub username.');
@@ -97,6 +106,7 @@ app.patch('/user/:id', async (req, res) => {
 });
 
 // Start the Express server
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
