@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
+const axios = require('axios');
 
 const app = express();
 app.use(bodyParser.json());
@@ -67,6 +68,13 @@ app.patch('/user/:id', async (req, res) => {
     }
 
     try {
+        // Validate GitHub username by making a request to GitHub API
+        const githubResponse = await axios.get(`https://api.github.com/users/${githubUsername}`);
+        if (githubResponse.status !== 200) {
+            res.status(400).send('Invalid GitHub username.');
+            return;
+        }
+
         // Search for the user by userId in Notion database
         const notionPages = await notion.databases.query({
             database_id: process.env.NOTION_DATABASE_ID,
@@ -98,10 +106,14 @@ app.patch('/user/:id', async (req, res) => {
             },
         });
 
-        res.status(200).send('GitHub username submitted successfully!');
+        res.status(200).send('GitHub username submitted and tracked successfully!');
     } catch (error) {
-        console.error('Error updating GitHub username in Notion:', error);
-        res.status(500).send('An error occurred while submitting GitHub username.');
+        if (error.response && error.response.status === 404) {
+            res.status(400).send('Invalid GitHub username.');
+        } else {
+            console.error('Error updating GitHub username in Notion:', error);
+            res.status(500).send('An error occurred while submitting GitHub username.');
+        }
     }
 });
 
