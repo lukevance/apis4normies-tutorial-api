@@ -218,7 +218,7 @@ app.get('/user/:id', async (req, res) => {
         const userData = {
             name: user.Name.title[0].text.content,
             githubUsername: user["Github username"].rich_text.length > 0 ? user["Github username"].rich_text[0].text.content : null,
-            score: user.Score ? user.Score.number : 0
+            score: user.Score && user.Score.formula ? user.Score.formula.number : 0
         };
 
         res.status(200).send(userData);
