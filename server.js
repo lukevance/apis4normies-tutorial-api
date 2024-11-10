@@ -194,6 +194,40 @@ app.post('/user/:id/webhook', async (req, res) => {
     }
 });
 
+// Endpoint to get user details
+app.get('/user/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // Search for the user by userId in Notion database
+        const notionPages = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID,
+            filter: {
+                property: 'User ID',
+                number: {
+                    equals: parseInt(id),
+                },
+            },
+        });
+
+        if (notionPages.results.length === 0) {
+            res.status(404).send('User ID not found in Notion.');
+            return;
+        }
+
+        const user = notionPages.results[0].properties;
+        const userData = {
+            name: user.Name.title[0].text.content,
+            githubUsername: user["Github username"].rich_text.length > 0 ? user["Github username"].rich_text[0].text.content : null,
+            score: user.Score ? user.Score.number : 0
+        };
+
+        res.status(200).send(userData);
+    } catch (error) {
+        console.error('Error retrieving user from Notion:', error);
+        res.status(500).send('An error occurred while retrieving the user.');
+    }
+});
+
 // Start the Express server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
