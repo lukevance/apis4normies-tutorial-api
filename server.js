@@ -118,8 +118,9 @@ app.patch('/user/:id', async (req, res) => {
     }
 });
 
-// Endpoint to schedule a webhook to be sent back to the provided ngrok URL
-app.post('/schedule-webhook', async (req, res) => {
+// Endpoint to schedule a webhook to be sent back to the provided ngrok URL and update ngrok setup status
+app.post('/user/:id/webhook', async (req, res) => {
+    const { id } = req.params;
     const { ngrokUrl, delaySeconds } = req.body;
     if (!ngrokUrl || !delaySeconds) {
         res.status(400).send('ngrok URL and delaySeconds are required.');
@@ -127,6 +128,24 @@ app.post('/schedule-webhook', async (req, res) => {
     }
 
     try {
+        // Search for the user by userId in Notion database
+        const notionPages = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID,
+            filter: {
+                property: 'User ID',
+                number: {
+                    equals: parseInt(id),
+                },
+            },
+        });
+
+        if (notionPages.results.length === 0) {
+            res.status(404).send('User ID not found in Notion.');
+            return;
+        }
+
+        const pageId = notionPages.results[0].id;
+
         // Schedule the webhook to be sent after delaySeconds
         setTimeout(async () => {
             try {
@@ -134,6 +153,16 @@ app.post('/schedule-webhook', async (req, res) => {
                     message: 'This is a test webhook from the server to verify ngrok is working properly!'
                 });
                 console.log(`Webhook sent to ${ngrokUrl}`);
+
+                // Update the ngrok setup checkbox in Notion
+                await notion.pages.update({
+                    page_id: pageId,
+                    properties: {
+                        "ngrok setup": {
+                            checkbox: true,
+                        },
+                    },
+                });
             } catch (error) {
                 console.error(`Error sending webhook to ${ngrokUrl}:`, error);
             }
