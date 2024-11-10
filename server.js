@@ -10,7 +10,7 @@ app.use(bodyParser.json());
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
-// Initialize the userId counter based on the number of existing users in the database
+// Initialize the userId counter based on the highest existing User ID in the database
 let currentUserId;
 
 const initializeUserId = async () => {
@@ -18,7 +18,8 @@ const initializeUserId = async () => {
         const notionPages = await notion.databases.query({
             database_id: process.env.NOTION_DATABASE_ID,
         });
-        currentUserId = notionPages.results.length + 1;
+        const userIds = notionPages.results.map(page => page.properties["User ID"].number);
+        currentUserId = userIds.length > 0 ? Math.max(...userIds) + 1 : 1;
     } catch (error) {
         console.error('Error initializing user ID:', error);
         currentUserId = 1; // Fallback to 1 if there's an error
@@ -114,6 +115,34 @@ app.patch('/user/:id', async (req, res) => {
             console.error('Error updating GitHub username in Notion:', error);
             res.status(500).send('An error occurred while submitting GitHub username.');
         }
+    }
+});
+
+// Endpoint to schedule a webhook to be sent back to the provided ngrok URL
+app.post('/schedule-webhook', async (req, res) => {
+    const { ngrokUrl, delaySeconds } = req.body;
+    if (!ngrokUrl || !delaySeconds) {
+        res.status(400).send('ngrok URL and delaySeconds are required.');
+        return;
+    }
+
+    try {
+        // Schedule the webhook to be sent after delaySeconds
+        setTimeout(async () => {
+            try {
+                await axios.post(ngrokUrl, {
+                    message: 'This is a test webhook from the server to verify ngrok is working properly!'
+                });
+                console.log(`Webhook sent to ${ngrokUrl}`);
+            } catch (error) {
+                console.error(`Error sending webhook to ${ngrokUrl}:`, error);
+            }
+        }, delaySeconds * 1000);
+
+        res.status(200).send(`Webhook scheduled to be sent in ${delaySeconds} seconds to ${ngrokUrl}`);
+    } catch (error) {
+        console.error('Error scheduling webhook:', error);
+        res.status(500).send('An error occurred while scheduling the webhook.');
     }
 });
 
