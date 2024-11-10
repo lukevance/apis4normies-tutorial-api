@@ -154,17 +154,36 @@ app.post('/user/:id/webhook', async (req, res) => {
                 });
                 console.log(`Webhook sent to ${ngrokUrl}`);
 
-                // Update the ngrok setup checkbox in Notion
+                // Update the ngrok setup checkbox and ngrok URL in Notion
                 await notion.pages.update({
                     page_id: pageId,
                     properties: {
                         "ngrok setup": {
                             checkbox: true,
                         },
+                        "ngrok url": {
+                            url: ngrokUrl,
+                        },
                     },
                 });
             } catch (error) {
-                console.error(`Error sending webhook to ${ngrokUrl}:`, error);
+                if (error.response && error.response.status === 400) {
+                    // Update the ngrok setup checkbox and ngrok URL even if there's a 400 error
+                    await notion.pages.update({
+                        page_id: pageId,
+                        properties: {
+                            "ngrok setup": {
+                                checkbox: true,
+                            },
+                            "ngrok url": {
+                                url: ngrokUrl,
+                            }
+                        },
+                    });
+                    console.error(`Webhook sent with a 400 error, but marking ngrok setup as true: ${error}`);
+                } else {
+                    console.error(`Error sending webhook to ${ngrokUrl}:`, error);
+                }
             }
         }, delaySeconds * 1000);
 
