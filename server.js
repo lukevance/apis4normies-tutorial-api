@@ -228,6 +228,69 @@ app.get('/user/:id', async (req, res) => {
     }
 });
 
+// Endpoint to submit Node and npm version
+app.post('/user/:id/node-check', async (req, res) => {
+    const { id } = req.params;
+    const { nodeVersion, npmVersion } = req.body;
+    if (!nodeVersion || !npmVersion) {
+        res.status(400).send('Node version and npm version are required.');
+        return;
+    }
+
+    try {
+        // Search for the user by userId in Notion database
+        const notionPages = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID,
+            filter: {
+                property: 'User ID',
+                number: {
+                    equals: parseInt(id),
+                },
+            },
+        });
+
+        if (notionPages.results.length === 0) {
+            res.status(404).send('User ID not found in Notion.');
+            return;
+        }
+
+        const pageId = notionPages.results[0].id;
+
+        // Generate log text for Node and npm version
+        const timestamp = new Date().toISOString();
+        const logText = `log: user submitted node-check at ${timestamp}
+node version: ${nodeVersion}
+npm version: ${npmVersion}
+----------`;
+
+        // Append log text to the existing content in the Notion page
+        await notion.blocks.children.append({
+            block_id: pageId,
+            children: [
+                {
+                    object: 'block',
+                    type: 'paragraph',
+                    paragraph: {
+                        rich_text: [
+                            {
+                                type: 'text',
+                                text: {
+                                    content: logText,
+                                },
+                            },
+                        ],
+                    },
+                },
+            ],
+        });
+
+        res.status(200).send('Node and npm versions submitted and logged successfully!');
+    } catch (error) {
+        console.error('Error appending log to Notion:', error);
+        res.status(500).send('An error occurred while submitting Node and npm versions.');
+    }
+});
+
 // Start the Express server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
