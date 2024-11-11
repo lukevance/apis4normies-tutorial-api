@@ -311,6 +311,15 @@ npm version: ${npmVersion}
             ],
         });
 
+        await notion.pages.update({
+            page_id: pageId,
+            properties: {
+                "Node setup": {
+                    checkbox: true,
+                }
+            },
+        });
+
         res.status(200).send('Node and npm versions submitted and logged successfully!');
     } catch (error) {
         console.error('Error appending log to Notion:', error);
