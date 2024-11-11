@@ -118,7 +118,6 @@ app.patch('/user/:id', async (req, res) => {
     }
 });
 
-// Endpoint to schedule a webhook to be sent back to the provided ngrok URL and update ngrok setup status
 app.post('/user/:id/webhook', async (req, res) => {
     const { id } = req.params;
     const { ngrokUrl, delaySeconds } = req.body;
@@ -164,7 +163,35 @@ app.post('/user/:id/webhook', async (req, res) => {
                         "ngrok url": {
                             url: ngrokUrl,
                         },
+                        "demo app setup": {
+                            checkbox: true,
+                        }
                     },
+                });
+
+                // Generate log text for sample app running
+                const timestamp = new Date().toISOString();
+                const logText = `log: sample app running at ${timestamp}\n`;
+
+                // Append log text to the existing content in the Notion page
+                await notion.blocks.children.append({
+                    block_id: pageId,
+                    children: [
+                        {
+                            object: 'block',
+                            type: 'paragraph',
+                            paragraph: {
+                                rich_text: [
+                                    {
+                                        type: 'text',
+                                        text: {
+                                            content: logText,
+                                        },
+                                    },
+                                ],
+                            },
+                        },
+                    ],
                 });
             } catch (error) {
                 if (error.response && error.response.status === 400) {
