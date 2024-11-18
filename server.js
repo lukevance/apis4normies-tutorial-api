@@ -4,6 +4,8 @@ const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 
+const transactionsRouter = require('./transactionsRouter');
+
 const app = express();
 app.use(bodyParser.json());
 
@@ -27,6 +29,34 @@ const initializeUserId = async () => {
 };
 
 initializeUserId();
+
+// Utility function to find and update a Notion user
+async function findAndUpdateNotionUser(userId, properties) {
+    // Search for the user by userId in Notion database
+    const notionPages = await notion.databases.query({
+        database_id: process.env.NOTION_DATABASE_ID,
+        filter: {
+            property: 'User ID',
+            number: {
+                equals: parseInt(userId),
+            },
+        },
+    });
+
+    if (notionPages.results.length === 0) {
+        throw new Error('User ID not found in Notion.');
+    }
+
+    const pageId = notionPages.results[0].id;
+
+    // Update the user entry with provided properties
+    await notion.pages.update({
+        page_id: pageId,
+        properties,
+    });
+
+    return pageId;
+}
 
 // Endpoint to create a user and return a userId
 app.post('/user', async (req, res) => {
@@ -76,38 +106,22 @@ app.patch('/user/:id', async (req, res) => {
             return;
         }
 
-        // Search for the user by userId in Notion database
-        const notionPages = await notion.databases.query({
-            database_id: process.env.NOTION_DATABASE_ID,
-            filter: {
-                property: 'User ID',
-                number: {
-                    equals: parseInt(id),
-                },
-            },
-        });
-
-        if (notionPages.results.length === 0) {
-            res.status(404).send('User ID not found in Notion.');
-            return;
-        }
-
-        const pageId = notionPages.results[0].id;
-
-        // Update the user entry with GitHub username
-        await notion.pages.update({
-            page_id: pageId,
-            properties: {
+        // Define properties to update in Notion
+        try {
+            const properties = {
                 "Github username": {
                     rich_text: [{ text: { content: githubUsername } }],
                 },
                 "Github signup": {
                     checkbox: true,
                 },
-            },
-        });
-
-        res.status(200).send('GitHub username submitted and tracked successfully!');
+            };
+            // attempt to update Notion page
+            await findAndUpdateNotionUser(id, properties);
+            res.status(200).send('GitHub username submitted and tracked successfully!');
+        } catch (error) {
+            res.status(404).send(error.message);
+        }        
     } catch (error) {
         if (error.response && error.response.status === 404) {
             res.status(400).send('Invalid GitHub username.');
@@ -194,7 +208,7 @@ app.post('/user/:id/webhook', async (req, res) => {
                     ],
                 });
             } catch (error) {
-                if (error.response && error.response.status === 400) {
+                if (error.response && error.response.status === 400 || error.response.status === 405) {
                     // Update the ngrok setup checkbox and ngrok URL even if there's a 400 error
                     await notion.pages.update({
                         page_id: pageId,
@@ -326,6 +340,8 @@ npm version: ${npmVersion}
         res.status(500).send('An error occurred while submitting Node and npm versions.');
     }
 });
+
+app.use('/transactions', transactionsRouter);
 
 // Start the Express server
 const PORT = process.env.PORT || 3000;
