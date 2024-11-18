@@ -22,6 +22,13 @@ const createdFilteredResponse = response => {
 // Retrieve a transaction by transactionId
 router.get('/:transactionId', async (req, res) => {
     const transactionId = req.params.transactionId;
+    const userId = req.query.userId;
+
+    // Validate required fields
+    if (!transactionId || !userId) {
+        return res.status(400).json({ error: 'transactionId and userId are required' });
+    }
+
     try {
         // Query the database to find the page ID by transactionId
         const searchResponse = await notion.databases.query({
@@ -40,7 +47,6 @@ router.get('/:transactionId', async (req, res) => {
 
         const pageId = searchResponse.results[0].id;
         const response = await notion.pages.retrieve({ page_id: pageId });
-        console.log(response);
         const filteredResponse = createdFilteredResponse(response);
         res.status(200).json(filteredResponse);
     } catch (error) {
