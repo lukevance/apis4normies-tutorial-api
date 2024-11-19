@@ -64,7 +64,7 @@ router.post('/', async (req, res) => {
     if (!transactionData.transactionId || !transactionData.userId) {
         return res.status(400).json({ error: 'transactionId and userId are required' });
     }
-
+    
     try {
         const response = await notion.pages.create({
             parent: { database_id: databaseId },
@@ -83,7 +83,7 @@ router.post('/', async (req, res) => {
                 },
                 Status: {
                     select: {
-                        name: transactionData.status || null,
+                        name: transactionData.status || "New",
                     },
                 },
             },
