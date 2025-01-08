@@ -4,6 +4,7 @@ const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 
+const { findNotionUser, findUserAndChap2Record, createChap2Record, updateChap2Record } = require('./notionUtil');
 const transactionsRouter = require('./transactionsRouter');
 
 const app = express();
@@ -11,6 +12,8 @@ app.use(bodyParser.json());
 
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
+const userDatabaseId = process.env.NOTION_DATABASE_ID;
+const chap2DatabaseId = process.env.NOTION_DATABASE_ID_chap2;
 
 // Initialize the userId counter based on the highest existing User ID in the database
 let currentUserId;
@@ -29,25 +32,6 @@ const initializeUserId = async () => {
 };
 
 initializeUserId();
-
-
-async function findNotionUser(userId) {
-    const notionPages = await notion.databases.query({
-        database_id: process.env.NOTION_DATABASE_ID,
-        filter: {
-            property: 'User ID',
-            number: {
-                equals: parseInt(userId),
-            },
-        },
-    });
-    if (notionPages.results.length === 0) {
-        // throw new Error('User ID not found in Notion.');
-        return null;
-    }
-    const user = notionPages.results[0];
-    return user;
-}
 
 // Utility function to find and update a Notion user
 async function findAndUpdateNotionUser(userId, properties) {
@@ -363,93 +347,62 @@ npm version: ${npmVersion}
 app.post('/user/:id/merchant', async (req, res) => {
     const { id } = req.params;
     const { merchantId, merchantType } = req.body;
-    
-        // get the user pageId
-        const user = await findNotionUser(id);
-        if (!user) {
-            res.status(404).send('User not found.');
-            return;
-        }
-        if (!merchantId) {
-            res.status(400).send('Merchant is required.');
-            return;
-        } else if (!merchantType || (merchantType !== 'gaming' &&  merchantType !== 'biller')) {
-            res.status(400).send('Merchant type must be "gaming" or "biller".');
-            return;
-        }
-    
 
-        try {
-            // check for a record in the 2nd database
-            const chap2Record = await notion.databases.query({
-                database_id: process.env.NOTION_DATABASE_ID_chap2,
-                filter: {
-                    property: 'Pre Work Leaderboard',
-                    relation: {
-                        contains: user.id,
-                    },
-                },
-            });
-            if (chap2Record.results.length > 0) {
-                // update the record
-                res.status(400).send('User already exists in the database. Use PATCH method to update record instead');
-            } else {
-                // create a record in the 2nd database
-                const userFirstName = user.properties.Name.title[0].plain_text.split(' ')[0];
-                const recordName = `${userFirstName}_${merchantType}`;
-                const chap2NewRecord = await notion.pages.create({
-                    parent: {
-                        type: 'database_id',
-                        database_id: process.env.NOTION_DATABASE_ID_chap2,
-                    },
-                    properties: {
-                        Name: {
-                            title: [{ text: { content: recordName } }],
-                        },
-                        'Pre Work Leaderboard': {
-                            type: 'relation',
-                            relation: [
-                                {
-                                    id: user.id,
-                                }
-                            ]
-                        },
-                        'MID': {
-                            type: 'number',
-                            number: parseInt(merchantId),
-                        },
-                    },
-                });
-                console.log(chap2NewRecord);
-                res.status(200).send(`Merchant ID recorded successfully for user: ${userFirstName}`);
-            }
-        }
-        catch (error) {
-            console.error('Error recording merchant for User:', error);
-            res.status(500).send('An error occurred while recording merchant for user.');
-        }
+    if (!merchantId) {
+        return res.status(400).send('Merchant is required.');
+    }
+    if (!merchantType || (merchantType !== 'gaming' && merchantType !== 'biller')) {
+        return res.status(400).send('Merchant type must be "gaming" or "biller".');
+    }
 
+    try {
+        const {user, chap2Record} = await findUserAndChap2Record(id, userDatabaseId, notion, chap2DatabaseId);
+        // TODO: throw error if already exists
+        if (chap2Record.results.length > 0) {
+            throw new Error('User already exists in the database. Use PATCH method to update record instead');
+        }
+        
+        const chap2NewRecord = await createChap2Record(user, merchantType, merchantId, notion, chap2DatabaseId);
+
+        res.status(200).send(`Merchant ID recorded successfully for user: ${user.properties.Name.title[0].plain_text.split(' ')[0]}`);
+    } catch (error) {
+        console.error('Error recording merchant for User:', error);
+        res.status(500).send(error.message);
+    }
 });
 
-// app.patch('/users/:id/merchants', async (req, res) => {
-//     try {
-//         const { id } = req.params;
-//         const { merchantId } = req.body;
-//         // Check if the user exists in the database
-//         await notion.pages.update({
-//             page_id: chap2Record.results[0].id,
-//             properties: {
-//                 'MID': {
-//                     type: 'number',
-//                     number: parseInt(merchantId),
-//                 },
-                
-//             }
-//         });
-//     }
-//     catch (error) {
-//     }
-// });
+// Endpoint to validate successful establish API call
+app.get('/user/:id/establish-return-cancel', async (req, res) => {
+    const { id } = req.params;
+    const { transactionId, status } = req.query;
+    // check if status was successful
+    if (status != 2) {
+        return res.status(400).send(`Invalid status. Authorization was not successful. \n${JSON.stringify(req.query)}`);
+    }
+    try {
+        // Query the database to find the page ID by userId 
+        const {user, chap2Record} = await findUserAndChap2Record(id, notion, userDatabaseId, chap2DatabaseId);
+        if (!user) {
+            return res.status(404).send('User not found.');
+        }
+        // create transaction record in Notion
+        console.log(chap2Record);
+        
+        // update chapter 2 db with authorize success
+        const updatedChap2Record = await updateChap2Record(chap2Record.id, notion, 'auth success', {
+            type: 'checkbox',
+            checkbox: true,
+        });
+        console.log(updatedChap2Record);
+
+        res.status(204).send('Authorization successful. User score updated.');
+
+    } catch (error) {
+        console.error('Error validating establish API call:', error);
+        res.status(500).send(error.message);
+    }
+});
+
 
 app.use('/transactions', transactionsRouter);
 
