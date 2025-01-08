@@ -363,93 +363,67 @@ npm version: ${npmVersion}
 app.post('/user/:id/merchant', async (req, res) => {
     const { id } = req.params;
     const { merchantId, merchantType } = req.body;
-    
-        // get the user pageId
+
+    if (!merchantId) {
+        return res.status(400).send('Merchant is required.');
+    }
+    if (!merchantType || (merchantType !== 'gaming' && merchantType !== 'biller')) {
+        return res.status(400).send('Merchant type must be "gaming" or "biller".');
+    }
+
+    try {
         const user = await findNotionUser(id);
         if (!user) {
-            res.status(404).send('User not found.');
-            return;
+            return res.status(404).send('User not found.');
         }
-        if (!merchantId) {
-            res.status(400).send('Merchant is required.');
-            return;
-        } else if (!merchantType || (merchantType !== 'gaming' &&  merchantType !== 'biller')) {
-            res.status(400).send('Merchant type must be "gaming" or "biller".');
-            return;
-        }
-    
 
-        try {
-            // check for a record in the 2nd database
-            const chap2Record = await notion.databases.query({
-                database_id: process.env.NOTION_DATABASE_ID_chap2,
-                filter: {
-                    property: 'Pre Work Leaderboard',
-                    relation: {
-                        contains: user.id,
-                    },
+        const chap2Record = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID_chap2,
+            filter: {
+                property: 'Pre Work Leaderboard',
+                relation: {
+                    contains: user.id,
                 },
-            });
-            if (chap2Record.results.length > 0) {
-                // update the record
-                res.status(400).send('User already exists in the database. Use PATCH method to update record instead');
-            } else {
-                // create a record in the 2nd database
-                const userFirstName = user.properties.Name.title[0].plain_text.split(' ')[0];
-                const recordName = `${userFirstName}_${merchantType}`;
-                const chap2NewRecord = await notion.pages.create({
-                    parent: {
-                        type: 'database_id',
-                        database_id: process.env.NOTION_DATABASE_ID_chap2,
-                    },
-                    properties: {
-                        Name: {
-                            title: [{ text: { content: recordName } }],
-                        },
-                        'Pre Work Leaderboard': {
-                            type: 'relation',
-                            relation: [
-                                {
-                                    id: user.id,
-                                }
-                            ]
-                        },
-                        'MID': {
-                            type: 'number',
-                            number: parseInt(merchantId),
-                        },
-                    },
-                });
-                console.log(chap2NewRecord);
-                res.status(200).send(`Merchant ID recorded successfully for user: ${userFirstName}`);
-            }
-        }
-        catch (error) {
-            console.error('Error recording merchant for User:', error);
-            res.status(500).send('An error occurred while recording merchant for user.');
+            },
+        });
+
+        if (chap2Record.results.length > 0) {
+            return res.status(400).send('User already exists in the database. Use PATCH method to update record instead');
         }
 
+        const userFirstName = user.properties.Name.title[0].plain_text.split(' ')[0];
+        const recordName = `${userFirstName}_${merchantType}`;
+        const chap2NewRecord = await notion.pages.create({
+            parent: {
+                type: 'database_id',
+                database_id: process.env.NOTION_DATABASE_ID_chap2,
+            },
+            properties: {
+                Name: {
+                    title: [{ text: { content: recordName } }],
+                },
+                'Pre Work Leaderboard': {
+                    type: 'relation',
+                    relation: [
+                        {
+                            id: user.id,
+                        }
+                    ]
+                },
+                'MID': {
+                    type: 'number',
+                    number: parseInt(merchantId),
+                },
+            },
+        });
+
+        console.log(chap2NewRecord);
+        res.status(200).send(`Merchant ID recorded successfully for user: ${userFirstName}`);
+    } catch (error) {
+        console.error('Error recording merchant for User:', error);
+        res.status(500).send('An error occurred while recording merchant for user.');
+    }
 });
-
-// app.patch('/users/:id/merchants', async (req, res) => {
-//     try {
-//         const { id } = req.params;
-//         const { merchantId } = req.body;
-//         // Check if the user exists in the database
-//         await notion.pages.update({
-//             page_id: chap2Record.results[0].id,
-//             properties: {
-//                 'MID': {
-//                     type: 'number',
-//                     number: parseInt(merchantId),
-//                 },
-                
-//             }
-//         });
-//     }
-//     catch (error) {
-//     }
-// });
 
 app.use('/transactions', transactionsRouter);
 
