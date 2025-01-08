@@ -1,7 +1,7 @@
 const { Client } = require('@notionhq/client');
-const notion = new Client({ auth: process.env.NOTION_API_KEY });
+// const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
-const findNotionUser = async (userId, userDatabaseId) => {
+const findNotionUser = async (userId, notion, userDatabaseId) => {
     try {
         const response = await notion.databases.query({
             database_id: userDatabaseId,
@@ -24,13 +24,13 @@ const findNotionUser = async (userId, userDatabaseId) => {
     }
 };
 
-const findUserAndCheckExistence = async (userId, notion, userDatabaseId, recordDatabaseId) => {
-    const user = await findNotionUser(userId, userDatabaseId);
+const findUserAndChap2Record  = async (userId, notion, userDatabaseId, recordDatabaseId) => {
+    const user = await findNotionUser(userId, notion, userDatabaseId);
     if (!user) {
         throw new Error('User not found.');
     }
 
-    const chap2Record = await notion.databases.query({
+    const chap2RecordsFound = await notion.databases.query({
         database_id: recordDatabaseId,
         filter: {
             property: 'Pre Work Leaderboard',
@@ -39,13 +39,9 @@ const findUserAndCheckExistence = async (userId, notion, userDatabaseId, recordD
             },
         },
     });
+    const chap2Record = chap2RecordsFound.results.length === 0 ? null : chap2RecordsFound.results[0];
 
-    // TODO: move this error to API handler instead of util function
-    if (chap2Record.results.length > 0) {
-        throw new Error('User already exists in the database. Use PATCH method to update record instead');
-    }
-
-    return user;
+    return {user, chap2Record};
 };
 
 const createChap2Record = async (user, merchantType, merchantId, notion, databaseId) => {
@@ -78,8 +74,50 @@ const createChap2Record = async (user, merchantType, merchantId, notion, databas
     return chap2NewRecord;
 };
 
+const updateChap2Record = async (pageId, notion, propertyName, propertyValue) => {
+    const properties = {};
+    properties[propertyName] = propertyValue;
+
+    const updatedRecord = await notion.pages.update({
+        page_id: pageId,
+        properties: properties,
+    });
+    console.log('updatedRecord', updatedRecord);
+
+    // TODO - Add logging to the Notion page
+//     const timestamp = new Date().toISOString();
+//         const logText = `log: user authorized transactionId at ${timestamp}
+// node version: ${nodeVersion}
+// npm version: ${npmVersion}
+// ----------`;
+
+//         // Append log text to the existing content in the Notion page
+//         await notion.blocks.children.append({
+//             block_id: pageId,
+//             children: [
+//                 {
+//                     object: 'block',
+//                     type: 'paragraph',
+//                     paragraph: {
+//                         rich_text: [
+//                             {
+//                                 type: 'text',
+//                                 text: {
+//                                     content: logText,
+//                                 },
+//                             },
+//                         ],
+//                     },
+//                 },
+//             ],
+//         });
+
+    return updatedRecord;
+};
+
 module.exports = {
     findNotionUser,
-    findUserAndCheckExistence,
+    findUserAndChap2Record,
     createChap2Record,
+    updateChap2Record,
 };
