@@ -62,7 +62,7 @@ async function findAndUpdateNotionUser(userId, properties) {
 }
 
 // Endpoint to create a user and return a userId
-app.post('/user', async (req, res) => {
+app.post('/users', async (req, res) => {
     const { name } = req.body;
     if (!name) {
         res.status(400).send('Name is required.');
@@ -93,7 +93,7 @@ app.post('/user', async (req, res) => {
 });
 
 // Endpoint for submitting GitHub username
-app.patch('/user/:id', async (req, res) => {
+app.patch('/users/:id', async (req, res) => {
     const { id } = req.params;
     const { githubUsername } = req.body;
     if (!githubUsername) {
@@ -135,7 +135,7 @@ app.patch('/user/:id', async (req, res) => {
     }
 });
 
-app.post('/user/:id/webhook', async (req, res) => {
+app.post('/users/:id/webhook', async (req, res) => {
     const { id } = req.params;
     const { ngrokUrl, delaySeconds } = req.body;
     if (!ngrokUrl || !delaySeconds) {
@@ -239,7 +239,7 @@ app.post('/user/:id/webhook', async (req, res) => {
 });
 
 // Endpoint to get user details
-app.get('/user/:id', async (req, res) => {
+app.get('/users/:id', async (req, res) => {
     const { id } = req.params;
     try {
         // Search for the user by userId in Notion database
@@ -273,7 +273,7 @@ app.get('/user/:id', async (req, res) => {
 });
 
 // Endpoint to submit Node and npm version
-app.post('/user/:id/node-check', async (req, res) => {
+app.post('/users/:id/node-check', async (req, res) => {
     const { id } = req.params;
     const { nodeVersion, npmVersion } = req.body;
     if (!nodeVersion || !npmVersion) {
@@ -343,68 +343,6 @@ npm version: ${npmVersion}
         res.status(500).send('An error occurred while submitting Node and npm versions.');
     }
 });
-
-app.post('/user/:id/merchant', async (req, res) => {
-    const { id } = req.params;
-    const { merchantId, merchantType } = req.body;
-
-    if (!merchantId) {
-        return res.status(400).send('Merchant is required.');
-    }
-    if (!merchantType || (merchantType !== 'gaming' && merchantType !== 'biller')) {
-        return res.status(400).send('Merchant type must be "gaming" or "biller".');
-    }
-
-    try {
-        const {user, chap2Record} = await findUserAndChap2Record(id, userDatabaseId, notion, chap2DatabaseId);
-        // TODO: throw error if already exists
-        if (chap2Record.results.length > 0) {
-            throw new Error('User already exists in the database. Use PATCH method to update record instead');
-        }
-        
-        const chap2NewRecord = await createChap2Record(user, merchantType, merchantId, notion, chap2DatabaseId);
-
-        res.status(200).send(`Merchant ID recorded successfully for user: ${user.properties.Name.title[0].plain_text.split(' ')[0]}`);
-    } catch (error) {
-        console.error('Error recording merchant for User:', error);
-        res.status(500).send(error.message);
-    }
-});
-
-// Endpoint to validate successful establish API call
-app.get('/user/:id/establish-return-cancel', async (req, res) => {
-    const { id } = req.params;
-    const { transactionId, status } = req.query;
-    // check if status was successful
-    if (status != 2) {
-        return res.status(400).send(`Invalid status. Authorization was not successful. \n${JSON.stringify(req.query)}`);
-    }
-    try {
-        // Query the database to find the page ID by userId 
-        const {user, chap2Record} = await findUserAndChap2Record(id, notion, userDatabaseId, chap2DatabaseId);
-        if (!user) {
-            return res.status(404).send('User not found.');
-        }
-        // create transaction record in Notion
-        console.log(chap2Record);
-        
-        // update chapter 2 db with authorize success
-        const updatedChap2Record = await updateChap2Record(chap2Record.id, notion, 'auth success', {
-            type: 'checkbox',
-            checkbox: true,
-        });
-        console.log(updatedChap2Record);
-
-        res.status(204).send('Authorization successful. User score updated.');
-
-    } catch (error) {
-        console.error('Error validating establish API call:', error);
-        res.status(500).send(error.message);
-    }
-});
-
-
-app.use('/transactions', transactionsRouter);
 
 // Start the Express server
 const PORT = process.env.PORT || 3000;
