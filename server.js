@@ -137,9 +137,9 @@ app.patch('/users/:id', async (req, res) => {
 
 app.post('/users/:id/webhook', async (req, res) => {
     const { id } = req.params;
-    const { ngrokUrl, delaySeconds } = req.body;
-    if (!ngrokUrl || !delaySeconds) {
-        res.status(400).send('ngrok URL and delaySeconds are required.');
+    const { webhookUrl, delaySeconds } = req.body;
+    if (!webhookUrl || !delaySeconds) {
+        res.status(400).send('webhook URL and delaySeconds are required.');
         return;
     }
 
@@ -165,20 +165,20 @@ app.post('/users/:id/webhook', async (req, res) => {
         // Schedule the webhook to be sent after delaySeconds
         setTimeout(async () => {
             try {
-                await axios.post(ngrokUrl, {
-                    message: 'This is a test webhook from the server to verify ngrok is working properly!'
+                await axios.post(webhookUrl, {
+                    message: 'This is a test webhook from the server to verify webhook is working properly!'
                 });
-                console.log(`Webhook sent to ${ngrokUrl}`);
+                console.log(`Webhook sent to ${webhookUrl}`);
 
-                // Update the ngrok setup checkbox and ngrok URL in Notion
+                // Update the webhook setup checkbox and webhook URL in Notion
                 await notion.pages.update({
                     page_id: pageId,
                     properties: {
-                        "ngrok setup": {
+                        "webhook setup": {
                             checkbox: true,
                         },
-                        "ngrok url": {
-                            url: ngrokUrl,
+                        "webhook url": {
+                            url: webhookUrl,
                         },
                         "demo app setup": {
                             checkbox: true,
@@ -212,26 +212,26 @@ app.post('/users/:id/webhook', async (req, res) => {
                 });
             } catch (error) {
                 if (error.response && error.response.status === 400 || error.response.status === 405) {
-                    // Update the ngrok setup checkbox and ngrok URL even if there's a 400 error
+                    // Update the webhook setup checkbox and webhook URL even if there's a 400 error
                     await notion.pages.update({
                         page_id: pageId,
                         properties: {
-                            "ngrok setup": {
+                            "webhook setup": {
                                 checkbox: true,
                             },
-                            "ngrok url": {
-                                url: ngrokUrl,
+                            "webhook url": {
+                                url: webhookUrl,
                             }
                         },
                     });
-                    console.error(`Webhook sent with a 400 error, but marking ngrok setup as true: ${error}`);
+                    console.error(`Webhook sent with a 400 error, but marking webhook setup as true: ${error}`);
                 } else {
-                    console.error(`Error sending webhook to ${ngrokUrl}:`, error);
+                    console.error(`Error sending webhook to ${webhookUrl}:`, error);
                 }
             }
         }, delaySeconds * 1000);
 
-        res.status(200).send(`Webhook scheduled to be sent in ${delaySeconds} seconds to ${ngrokUrl}`);
+        res.status(200).send(`Webhook scheduled to be sent in ${delaySeconds} seconds to ${webhookUrl}`);
     } catch (error) {
         console.error('Error scheduling webhook:', error);
         res.status(500).send('An error occurred while scheduling the webhook.');
