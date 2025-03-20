@@ -137,7 +137,8 @@ app.patch('/users/:id', async (req, res) => {
 
 app.post('/users/:id/webhook', async (req, res) => {
     const { id } = req.params;
-    const { webhookUrl, delaySeconds } = req.body;
+    const { webhookUrl, delaySeconds, demoAppId } = req.body;
+    
     if (!webhookUrl || !delaySeconds) {
         res.status(400).send('webhook URL and delaySeconds are required.');
         return;
@@ -170,46 +171,51 @@ app.post('/users/:id/webhook', async (req, res) => {
                 });
                 console.log(`Webhook sent to ${webhookUrl}`);
 
+                const notionProperties = {
+                    "webhook setup": {
+                        checkbox: true,
+                    },
+                    "webhook url": {
+                        url: webhookUrl,
+                    }
+                };
+                
+                if (demoAppId) { 
+                    notionProperties["demo app setup"] = {checkbox: true};
+                }
+
                 // Update the webhook setup checkbox and webhook URL in Notion
                 await notion.pages.update({
                     page_id: pageId,
-                    properties: {
-                        "webhook setup": {
-                            checkbox: true,
-                        },
-                        "webhook url": {
-                            url: webhookUrl,
-                        },
-                        "demo app setup": {
-                            checkbox: true,
-                        }
-                    },
+                    properties: notionProperties,
                 });
+                if (demoAppId){
+                    // Generate log text for sample app running
+                    const timestamp = new Date().toISOString();
+                    const logText = `log: sample app running at ${timestamp}\n\n on plaform ${demoAppId}`;
 
-                // Generate log text for sample app running
-                const timestamp = new Date().toISOString();
-                const logText = `log: sample app running at ${timestamp}\n`;
-
-                // Append log text to the existing content in the Notion page
-                await notion.blocks.children.append({
-                    block_id: pageId,
-                    children: [
-                        {
-                            object: 'block',
-                            type: 'paragraph',
-                            paragraph: {
-                                rich_text: [
-                                    {
-                                        type: 'text',
-                                        text: {
-                                            content: logText,
+                    // Append log text to the existing content in the Notion page
+                    await notion.blocks.children.append({
+                        block_id: pageId,
+                        children: [
+                            {
+                                object: 'block',
+                                type: 'paragraph',
+                                paragraph: {
+                                    rich_text: [
+                                        {
+                                            type: 'text',
+                                            text: {
+                                                content: logText,
+                                            },
                                         },
-                                    },
-                                ],
+                                    ],
+                                },
                             },
-                        },
-                    ],
-                });
+                        ],
+                    });
+                } // end IF demo app is running
+
             } catch (error) {
                 if (error.response && error.response.status === 400 || error.response.status === 405) {
                     // Update the webhook setup checkbox and webhook URL even if there's a 400 error
