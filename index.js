@@ -350,6 +350,37 @@ npm version: ${npmVersion}
     }
 });
 
+app.get('/scoreboard', async (req, res) => {
+    try {
+        const notionPages = await notion.databases.query({
+            database_id: process.env.NOTION_DATABASE_ID,
+        });
+
+        const scoreboardData = notionPages.results.map(page => {
+            const properties = page.properties;
+            return {
+                name: properties.Name?.title?.[0]?.text?.content || 'No Name',
+                score: properties.Score?.formula?.number || 0,
+                lastEditedTime: page.last_edited_time,
+            };
+        });
+
+        scoreboardData.sort((a, b) => {
+            // Sort by score descending
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+            // If scores are equal, sort by last edited time ascending
+            return new Date(b.lastEditedTime) - new Date(a.lastEditedTime);
+        });
+
+        res.status(200).json(scoreboardData);
+    } catch (error) {
+        console.error('Error fetching and sorting scoreboard data:', error);
+        res.status(500).send('An error occurred while fetching the scoreboard.');
+    }
+});
+
 // Start the Express server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
