@@ -3,12 +3,20 @@ const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
 const axios = require('axios');
+const basicAuth = require('express-basic-auth');
 
 const { findNotionUser, findUserAndChap2Record, createChap2Record, updateChap2Record } = require('./notionUtil');
 const transactionsRouter = require('./transactionsRouter');
 
 const app = express();
 app.use(bodyParser.json());
+
+// Setup simple basic auth
+const apiUsername = process.env.V0_USERNAME;
+const apiPW = process.env.V0_PASS;
+
+const apiUsers = { [apiUsername]: apiPW };
+app.use(basicAuth({ apiUsers, challenge: true }));
 
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
