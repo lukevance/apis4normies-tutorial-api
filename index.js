@@ -353,7 +353,7 @@ npm version: ${npmVersion}
     }
 });
 
-app.get('/scoreboard', async (req, res) => {
+const userHandler = async (req, res) => {
     try {
         const notionPages = await notion.databases.query({
             database_id: process.env.NOTION_DATABASE_ID,
@@ -382,7 +382,10 @@ app.get('/scoreboard', async (req, res) => {
         console.error('Error fetching and sorting scoreboard data:', error);
         res.status(500).send('An error occurred while fetching the scoreboard.');
     }
-});
+};
+
+app.get('/scoreboard', userHandler);
+app.get('/users', userHandler);
 
 // Start the Express server
 const PORT = process.env.PORT || 3000;
