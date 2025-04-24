@@ -13,6 +13,13 @@ app.use(bodyParser.json());
 
 app.use(cors());
 
+// Setup simple basic auth
+// const apiUsername = process.env.V0_USERNAME;
+// const apiPW = process.env.V0_PASS;
+
+// const apiUsers = { [apiUsername]: apiPW };
+// app.use(basicAuth({ apiUsers, challenge: true }));
+
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
 const userDatabaseId = process.env.NOTION_DATABASE_ID;
