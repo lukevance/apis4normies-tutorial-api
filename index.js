@@ -363,6 +363,7 @@ const userHandler = async (req, res) => {
             const properties = page.properties;
             return {
                 name: properties.Name?.title?.[0]?.text?.content || 'No Name',
+                id: properties["User ID"].number,
                 score: properties.Score?.formula?.number || 0,
                 lastEditedTime: page.last_edited_time,
             };
