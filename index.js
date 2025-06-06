@@ -2,6 +2,8 @@ require('dotenv').config();
 const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
 const axios = require('axios');
 const cors = require('cors');
 
@@ -12,6 +14,12 @@ const app = express();
 app.use(bodyParser.json());
 
 app.use(cors());
+
+function generateApiKey() {
+  const prefix = 'normie_key_';
+  const randomPart = crypto.randomBytes(15).toString('base64url'); // Shorter, readable, URL-safe
+  return prefix + randomPart;
+}
 
 // Setup simple basic auth
 // const apiUsername = process.env.V0_USERNAME;
@@ -81,7 +89,8 @@ app.post('/users', async (req, res) => {
 
     try {
         const userId = currentUserId++; // Assign current ID and increment
-
+        const rawApiKey = generateApiKey(); // e.g. 'normie_sk_live_abc123'
+        const hashedApiKey = await bcrypt.hash(rawApiKey, 10);
         // Add entry to Notion database
         await notion.pages.create({
             parent: { database_id: process.env.NOTION_DATABASE_ID },
@@ -95,7 +104,7 @@ app.post('/users', async (req, res) => {
             },
         });
 
-        res.status(200).send({ userId: userId, message: 'User created successfully!' });
+        res.status(200).send({ userId: userId, apiKey: rawApiKey, message: 'User created successfully!' });
     } catch (error) {
         console.error('Error creating user in Notion:', error);
         res.status(500).send('An error occurred while creating the user.');
