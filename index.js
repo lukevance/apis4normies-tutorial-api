@@ -15,18 +15,37 @@ app.use(bodyParser.json());
 
 app.use(cors());
 
+// function for creating API keys for users
 function generateApiKey() {
   const prefix = 'normie_key_';
   const randomPart = crypto.randomBytes(15).toString('base64url'); // Shorter, readable, URL-safe
   return prefix + randomPart;
 }
 
-// Setup simple basic auth
-// const apiUsername = process.env.V0_USERNAME;
-// const apiPW = process.env.V0_PASS;
+// functionfor verifying API key
+async function verifyApiKey(req, res, next) {
+  const authHeader = req.headers['authorization'];
 
-// const apiUsers = { [apiUsername]: apiPW };
-// app.use(basicAuth({ apiUsers, challenge: true }));
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
+  }
+
+  const providedKey = authHeader.split(' ')[1];
+
+  try {
+    const isValid = await bcrypt.compare(providedKey, req.user.hashedApiKey);
+
+    if (!isValid) {
+      return res.status(403).json({ error: 'Invalid API key' });
+    }
+
+    next(); // Auth success
+  } catch (err) {
+    console.error('API key verification error:', err);
+    res.status(500).json({ error: 'Server error validating API key' });
+  }
+};
+
 
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
