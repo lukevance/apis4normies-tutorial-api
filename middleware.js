@@ -1,3 +1,6 @@
+const crypto = require('crypto');
+const bcrypt = require('bcrypt');
+
 // function for creating API keys for users
 function generateApiKey() {
   const prefix = 'normie_key_';
