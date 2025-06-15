@@ -2,6 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
+const bcrypt = require('bcrypt');
 const axios = require('axios');
 const cors = require('cors');
 
