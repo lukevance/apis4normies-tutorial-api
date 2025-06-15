@@ -2,50 +2,17 @@ require('dotenv').config();
 const express = require('express');
 const { Client } = require('@notionhq/client');
 const bodyParser = require('body-parser');
-const crypto = require('crypto');
-const bcrypt = require('bcrypt');
 const axios = require('axios');
 const cors = require('cors');
 
-const { findNotionUser, findUserAndChap2Record, createChap2Record, updateChap2Record } = require('./notionUtil');
+const { getUserById, updateNotionUser } = require('./notionUtil');
 const transactionsRouter = require('./transactionsRouter');
+const { verifyApiKey, generateApiKey } = require('./middleware');
 
 const app = express();
 app.use(bodyParser.json());
 
 app.use(cors());
-
-// function for creating API keys for users
-function generateApiKey() {
-  const prefix = 'normie_key_';
-  const randomPart = crypto.randomBytes(15).toString('base64url'); // Shorter, readable, URL-safe
-  return prefix + randomPart;
-}
-
-// functionfor verifying API key
-async function verifyApiKey(req, res, next) {
-  const authHeader = req.headers['authorization'];
-
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    return res.status(401).json({ error: 'Missing or invalid Authorization header' });
-  }
-
-  const providedKey = authHeader.split(' ')[1];
-
-  try {
-    const isValid = await bcrypt.compare(providedKey, req.user.hashedApiKey);
-
-    if (!isValid) {
-      return res.status(403).json({ error: 'Invalid API key' });
-    }
-
-    next(); // Auth success
-  } catch (err) {
-    console.error('API key verification error:', err);
-    res.status(500).json({ error: 'Server error validating API key' });
-  }
-};
-
 
 // Initialize Notion client
 const notion = new Client({ auth: process.env.NOTION_API_KEY });
@@ -70,34 +37,6 @@ const initializeUserId = async () => {
 
 initializeUserId();
 
-// Utility function to find and update a Notion user
-async function findAndUpdateNotionUser(userId, properties) {
-    // Search for the user by userId in Notion database
-    const notionPages = await notion.databases.query({
-        database_id: process.env.NOTION_DATABASE_ID,
-        filter: {
-            property: 'User ID',
-            number: {
-                equals: parseInt(userId),
-            },
-        },
-    });
-
-    if (notionPages.results.length === 0) {
-        throw new Error('User ID not found in Notion.');
-    }
-
-    const pageId = notionPages.results[0].id;
-
-    // Update the user entry with provided properties
-    await notion.pages.update({
-        page_id: pageId,
-        properties,
-    });
-
-    return pageId;
-}
-
 // Endpoint to create a user and return a userId
 app.post('/users', async (req, res) => {
     const { name } = req.body;
@@ -119,11 +58,14 @@ app.post('/users', async (req, res) => {
                 },
                 "User ID": {
                     number: userId,
-                }
+                },
+                "Hashed API Key": {
+                    rich_text: [{ text: { content: hashedApiKey } }],
+                },
             },
         });
 
-        res.status(200).send({ userId: userId, apiKey: rawApiKey, message: 'User created successfully!' });
+        res.status(200).send({ userId: userId, apiKey: rawApiKey, message: 'User and apiKey created successfully! Copy your apiKey it is not recoverable.' });
     } catch (error) {
         console.error('Error creating user in Notion:', error);
         res.status(500).send('An error occurred while creating the user.');
@@ -134,12 +76,32 @@ app.post('/users', async (req, res) => {
 app.patch('/users/:id', async (req, res) => {
     const { id } = req.params;
     const { githubUsername } = req.body;
+    let apiKey = req.header('Authorization');
+    if (apiKey && apiKey.startsWith('Bearer ')) {
+        apiKey = apiKey.slice(7);
+    }
     if (!githubUsername) {
         res.status(400).send('GitHub username is required.');
         return;
     }
+    if (!apiKey) {
+        res.status(401).send('API key required.');
+        return;
+    }
 
     try {
+        // Get user from Notion by ID
+        const user = await getUserById(id, notion, userDatabaseId);
+        if (!user) {
+            res.status(404).send('User ID not found.');
+            return;
+        }
+        // Verify API key
+        const isValidApiKey = await bcrypt.compare(apiKey, user.properties["Hashed API Key"].rich_text[0].text.content);
+        if (!isValidApiKey) {
+            res.status(403).send('Invalid API key.');
+            return;
+        }
         // Validate GitHub username by making a request to GitHub API
         const githubResponse = await axios.get(`https://api.github.com/users/${githubUsername}`);
         if (githubResponse.status !== 200) {
@@ -158,8 +120,8 @@ app.patch('/users/:id', async (req, res) => {
                 },
             };
             // attempt to update Notion page
-            await findAndUpdateNotionUser(id, properties);
-            res.status(200).send('GitHub username submitted and tracked successfully!');
+            await updateNotionUser(user, properties);
+            res.status(204).send('GitHub username submitted and tracked successfully!');
         } catch (error) {
             res.status(404).send(error.message);
         }        

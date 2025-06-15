@@ -1,7 +1,7 @@
 const { Client } = require('@notionhq/client');
-// const notion = new Client({ auth: process.env.NOTION_API_KEY });
+const notion = new Client({ auth: process.env.NOTION_API_KEY });
 
-const findNotionUser = async (userId, notion, userDatabaseId) => {
+const getUserById = async (userId, notion, userDatabaseId) => {
     try {
         const response = await notion.databases.query({
             database_id: userDatabaseId,
@@ -16,13 +16,54 @@ const findNotionUser = async (userId, notion, userDatabaseId) => {
         if (response.results.length === 0) {
             return null;
         }
-
+        console.log('User found:', response.results[0]);
         return response.results[0];
     } catch (error) {
         console.error('Error finding Notion user:', error);
         throw new Error('Error finding Notion user');
     }
 };
+
+// Utility function to find and update a Notion user
+async function findAndUpdateNotionUser(userId, properties) {
+    // Search for the user by userId in Notion database
+    const notionPages = await notion.databases.query({
+        database_id: process.env.NOTION_DATABASE_ID,
+        filter: {
+            property: 'User ID',
+            number: {
+                equals: parseInt(userId),
+            },
+        },
+    });
+
+    if (notionPages.results.length === 0) {
+        throw new Error('User ID not found in Notion.');
+    }
+
+    const pageId = notionPages.results[0].id;
+
+    // Update the user entry with provided properties
+    await notion.pages.update({
+        page_id: pageId,
+        properties,
+    });
+
+    return pageId;
+}
+
+//  Update the user in Notion by userId
+const updateNotionUser = async (user, properties) => {
+
+    const updatedUser = await notion.pages.update({
+        page_id: user.id,
+        properties: properties,
+    });
+
+    return updatedUser;
+};
+
+
 
 const findUserAndChap2Record  = async (userId, notion, userDatabaseId, recordDatabaseId) => {
     const user = await findNotionUser(userId, notion, userDatabaseId);
